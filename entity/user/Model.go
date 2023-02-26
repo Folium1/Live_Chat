@@ -1,6 +1,6 @@
-package entity
+package user
 
-type User struct {
+type user struct {
 	Id       string `json:"id"`
 	Name     string `json:"name"`
 	Mail     string `json:"mail"`
