@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-const userTable string = "users"
+const userTable = "users"
 
 type UserService interface {
 	CreateUser(newUser user) error
@@ -15,6 +15,7 @@ func New() UserService {
 	return &user{}
 }
 
+// Creats new user
 func (u *user) CreateUser(newUser user) error {
 	db, err := entity.DbConnect(userTable)
 	if err != nil {
@@ -28,4 +29,3 @@ func (u *user) CreateUser(newUser user) error {
 	}
 	return nil
 }
-
