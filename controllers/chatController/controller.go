@@ -3,8 +3,7 @@ package chatController
 import (
 	chatdto "chat/DTO/chatDTO"
 	"chat/entity/chat"
-
-	"github.com/mitchellh/mapstructure"
+	"encoding/json"
 )
 
 type chatController struct {
@@ -23,20 +22,31 @@ type ControllerInterface interface {
 
 func (c *chatController) CreateMsg(msg chatdto.CreateMessageDTO) error {
 	var message chat.Message
-	err := mapstructure.Decode(msg, &message)
+	// Parsing dto data to Message struct variable
+	data, err := json.Marshal(msg)
 	if err != nil {
 		return err
 	}
-	err = c.db.CreateMsg(message)
+	err = json.Unmarshal(data, &message)
+	if err != nil {
+		return err
+	}
+	err = c.db.SendMsg(message)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
+// Gets new text for message by id
 func (c *chatController) ChangeData(newData chatdto.UpdateMessageDTO) error {
 	var changedMessage chat.Message
-	err := mapstructure.Decode(newData, &changedMessage)
+	// Parsing dto data to Message struct variable
+	data, err := json.Marshal(newData)
+	if err != nil {
+		return err
+	}
+	err = json.Unmarshal(data, &changedMessage)
 	if err != nil {
 		return err
 	}
@@ -47,6 +57,7 @@ func (c *chatController) ChangeData(newData chatdto.UpdateMessageDTO) error {
 	return nil
 }
 
+// Delets message from db by id
 func (c *chatController) DeleteMsg(id string) error {
 	err := c.db.DeleteMsg(id)
 	if err != nil {
