@@ -2,7 +2,7 @@ package chatController
 
 import (
 	chatdto "chat/DTO/chatDTO"
-	"chat/entity/chat"
+	"chat/entities/chat"
 	"encoding/json"
 )
 
@@ -50,7 +50,7 @@ func (c *chatController) ChangeData(newData chatdto.UpdateMessageDTO) error {
 	if err != nil {
 		return err
 	}
-	err = c.db.ChangemMsg(changedMessage)
+	err = c.db.EditmMsg(changedMessage)
 	if err != nil {
 		return err
 	}
