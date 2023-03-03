@@ -17,11 +17,12 @@ func New(msg user.UserService) UserController {
 
 type UserController interface {
 	CreateUser(newUser dto.CreateUserDTO) error
-	GetUser(userData dto.GetUserDTO) (int, error)
+	GetUser(userData dto.GetUserDTO) (dto.UserDTO, error)
 }
 
 func (c *userController) CreateUser(newUser dto.CreateUserDTO) error {
-	dbUser, err := parser.ParseUserData(newUser, user.User{})
+	var dbUser user.User
+	err := parser.ParseToDb(newUser, &dbUser)
 	if err != nil {
 		log.Printf("couldn't parse dto data to db struct, err: %v", err)
 	}
@@ -32,15 +33,22 @@ func (c *userController) CreateUser(newUser dto.CreateUserDTO) error {
 	return nil
 }
 
-func (c *userController) GetUser(userData dto.GetUserDTO) (int, error) {
-	dbUser, err := parser.ParseUserData(userData, user.User{})
+func (c *userController) GetUser(userData dto.GetUserDTO) (dto.UserDTO, error) {
+	var dbUser user.User
+	err := parser.ParseToDb(userData, &dbUser)
 	if err != nil {
 		log.Printf("couldn't parse dto data to db struct, err: %v", err)
 	}
-	id, err := c.db.GetUser(dbUser)
+	userFromDb, err := c.db.GetUser(dbUser)
 	if err != nil {
 		log.Printf("couldn't get user, err: %v", err)
-		return 0, err
+		return dto.UserDTO{}, err
 	}
-	return id, nil
+	var userDTO dto.UserDTO
+	err = parser.ParseToDTO(userFromDb, &userDTO)
+	if err != nil {
+		log.Printf("couldn't parse db data to dto struct, err: %v", err)
+		return dto.UserDTO{}, err
+	}
+	return userDTO, nil
 }
