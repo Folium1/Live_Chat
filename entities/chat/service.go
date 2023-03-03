@@ -13,6 +13,7 @@ type MessageService interface {
 	SendMsg(msg Message) error
 	EditmMsg(newMessageData Message) error
 	DeleteMsg(id string) error
+	GetAllMessages() ([]Message, error)
 }
 
 func New() MessageService {
@@ -21,7 +22,7 @@ func New() MessageService {
 
 // Creates message
 func (m *Message) SendMsg(msg Message) error {
-	db, err := entity.DbConnect(messageTable)
+	db, err := entity.DbConnect()
 	if err != nil {
 		log.Panicf("Couldn't connect to db, err: %v", err)
 	}
@@ -29,7 +30,7 @@ func (m *Message) SendMsg(msg Message) error {
 	// Setting up local time for sent message
 	msg.CreatedAt = time.Now().Format("2006-01-02 15:04")
 	msg.UpdatedAt = time.Now().Format("2006-01-02 15:04")
-	query := fmt.Sprintf("INSERT INTO messages(user_id,text,created_at,updated_at) VALUES(%v,%v,%v,%v);", msg.UserId, msg.Text, msg.CreatedAt, msg.UpdatedAt)
+	query := fmt.Sprintf("INSERT INTO messages(user_name,text,created_at,updated_at) VALUES(%v,%v,%v,%v);", msg.UserName, msg.Text, msg.CreatedAt, msg.UpdatedAt)
 	_, err = db.Query(query)
 	if err != nil {
 		return err
@@ -39,7 +40,7 @@ func (m *Message) SendMsg(msg Message) error {
 
 // Changes text of the msg
 func (m *Message) EditmMsg(newMessageData Message) error {
-	db, err := entity.DbConnect(messageTable)
+	db, err := entity.DbConnect()
 	if err != nil {
 		log.Panicf("Couldn't connect to db, err: %v", err)
 	}
@@ -56,7 +57,7 @@ func (m *Message) EditmMsg(newMessageData Message) error {
 
 // Deletes message from db
 func (m *Message) DeleteMsg(id string) error {
-	db, err := entity.DbConnect(messageTable)
+	db, err := entity.DbConnect()
 	if err != nil {
 		log.Panicf("Couldn't connect to db, err: %v", err)
 	}
@@ -67,4 +68,28 @@ func (m *Message) DeleteMsg(id string) error {
 		return err
 	}
 	return nil
+}
+
+func (m *Message) GetAllMessages() ([]Message, error) {
+	db, err := entity.DbConnect()
+	if err != nil {
+		log.Panicf("Couldn't connect to db, err: %v", err)
+	}
+	defer db.Close()
+	query := fmt.Sprintf("SELECT text,created_at,updated_at FROM messages ORDER BY -created_at;")
+	q, err := db.Query(query)
+	if err != nil {
+		log.Panicf("Couldn't make a query, err: %v", err)
+	}
+	var messages []Message
+	for q.Next() {
+		var currentMessage Message
+		err = q.Scan(&currentMessage.Text, currentMessage.CreatedAt, currentMessage.UpdatedAt)
+		if err != nil {
+
+			return nil, err
+		}
+		messages = append(messages, currentMessage)
+	}
+	return messages, nil
 }
