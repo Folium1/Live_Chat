@@ -20,59 +20,65 @@ var (
 )
 
 // signing up new user
-func signUp(w http.ResponseWriter, r *http.Request) {
-	if r.Method == "GET" {
-		err := Tmpl.ExecuteTemplate(w, "register.html", nil)
+func signUpHandler() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, err := getToken(r)
 		if err != nil {
-			errHandler.err = fmt.Errorf("server error")
-			errHandler.responseForError(w, http.StatusInternalServerError)
-			return
-		}
-	}
-	if r.Method == "POST" {
-		err := r.ParseForm()
-		if err != nil {
-			log.Printf("couldn't parse data to CreateUserDTO err: %v", err)
-			return
-		}
-		newUser := dto.CreateUserDTO{
-			Name:     r.FormValue("name"),
-			Mail:     r.FormValue("mail"),
-			Password: r.FormValue("pass"),
-		}
+			if r.Method == "GET" {
+				err := Tmpl.ExecuteTemplate(w, "register.html", nil)
+				if err != nil {
+					errHandler.err = fmt.Errorf("server error")
+					errHandler.responseForError(w, http.StatusInternalServerError)
+					return
+				}
+			}
+			if r.Method == "POST" {
+				err := r.ParseForm()
+				if err != nil {
+					log.Printf("couldn't parse data to CreateUserDTO err: %v", err)
+					return
+				}
+				newUser := dto.CreateUserDTO{
+					Name:     r.FormValue("name"),
+					Mail:     r.FormValue("mail"),
+					Password: r.FormValue("pass"),
+				}
 
-		// validating data
-		if newUser.Name == "" {
-			errHandler.err = fmt.Errorf("missing name")
-			errHandler.responseForError(w, http.StatusBadRequest)
-			return
-		}
-		if newUser.Mail == "" {
-			errHandler.err = fmt.Errorf("missing mail")
-			errHandler.responseForError(w, http.StatusBadRequest)
-			return
-		}
-		if len(newUser.Password) < 8 {
-			errHandler.err = fmt.Errorf("password is too short, at least 8 elements required")
-			errHandler.responseForError(w, http.StatusBadRequest)
-			return
-		}
+				// validating data
+				if newUser.Name == "" {
+					errHandler.err = fmt.Errorf("missing name")
+					errHandler.responseForError(w, http.StatusBadRequest)
+					return
+				}
+				if newUser.Mail == "" {
+					errHandler.err = fmt.Errorf("missing mail")
+					errHandler.responseForError(w, http.StatusBadRequest)
+					return
+				}
+				if len(newUser.Password) < 8 {
+					errHandler.err = fmt.Errorf("password is too short, at least 8 elements required")
+					errHandler.responseForError(w, http.StatusBadRequest)
+					return
+				}
 
-		// Hashing user's password
-		hash, err := bcrypt.GenerateFromPassword([]byte(newUser.Password), 10)
-		if err != nil {
-			log.Fatal(err)
+				// Hashing user's password
+				hash, err := bcrypt.GenerateFromPassword([]byte(newUser.Password), 10)
+				if err != nil {
+					log.Fatal(err)
+				}
+				newUser.Password = string(hash)
+				err = userController.CreateUser(newUser)
+				if err != nil {
+					errHandler.err = fmt.Errorf("server error")
+					errHandler.responseForError(w, http.StatusInternalServerError)
+					return
+				}
+				http.Redirect(w, r, "/", http.StatusFound)
+			}
+		} else {
+			http.Redirect(w, r, "/chat/", http.StatusFound)
 		}
-		newUser.Password = string(hash)
-		err = userController.CreateUser(newUser)
-		if err != nil {
-			errHandler.err = fmt.Errorf("server error")
-			errHandler.responseForError(w, http.StatusInternalServerError)
-			return
-		}
-		http.Redirect(w, r, "/login/", http.StatusSeeOther)
-	}
-
+	})
 }
 
 func loginHandler() http.Handler {
@@ -117,12 +123,12 @@ func loginHandler() http.Handler {
 				errHandler.responseForError(w, http.StatusUnauthorized)
 				return
 			}
-			err = AuthUser(w, dbUser)
+			err = AuthUser(w, r, dbUser)
 			if err != nil {
 				errHandler.err = err
 				errHandler.responseForError(w, 500)
 			}
-			http.Redirect(w, r, "/chat/", http.StatusSeeOther)
+			http.Redirect(w, r, "/chat/", http.StatusFound)
 		}
 
 	})

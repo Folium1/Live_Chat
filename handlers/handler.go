@@ -1,19 +1,29 @@
 package handlers
 
 import (
-	"fmt"
 	"html/template"
 	"log"
 	"net/http"
-	"strconv"
 )
 
 var Tmpl *template.Template
 
 func chatHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		userid := r.Context().Value("userId").(int)
-		message := fmt.Sprintf("Hello " + strconv.Itoa(userid))
+		// checking if token is present, if not - redirects to login page
+		token, err := getToken(r)
+		if err != nil {
+			log.Println(err)
+			http.Redirect(w, r, "/", http.StatusFound)
+			return
+		}
+		// getting user's id from token
+		userId, err := validateToken(token)
+		if err != nil {
+			http.Error(w, "No user id", http.StatusFound)
+		}
+
+		message := "Hello " + userId
 		w.Write([]byte(message))
 	})
 }
@@ -26,10 +36,10 @@ func StartServer() {
 	}
 
 	http.HandleFunc("/chat/", AuthMiddleWare(chatHandler).ServeHTTP)
-	http.HandleFunc("/login/", AuthMiddleWare(loginHandler).ServeHTTP)
-	http.HandleFunc("/sign-up/", signUp)
+	http.HandleFunc("/", loginHandler().ServeHTTP)
+	http.HandleFunc("/sign-up/", AuthMiddleWare(signUpHandler).ServeHTTP)
 
-	err = http.ListenAndServe(":9090", nil)
+	err = http.ListenAndServe(":7070", nil)
 	if err != nil {
 		log.Fatal(err)
 	}
