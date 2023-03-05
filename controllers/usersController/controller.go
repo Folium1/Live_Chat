@@ -1,10 +1,11 @@
 package usersController
 
 import (
+	"log"
+
 	dto "chat/DTO/userdto"
 	parser "chat/controllers"
 	"chat/entities/user"
-	"log"
 )
 
 type userController struct {
@@ -17,7 +18,7 @@ func New(msg user.UserService) UserController {
 
 type UserController interface {
 	CreateUser(newUser dto.CreateUserDTO) error
-	GetUser(userData dto.GetUserDTO) (dto.UserDTO, error)
+	GetUser(userData dto.GetUserDTO) (dto.GetUserDTO, error)
 }
 
 func (c *userController) CreateUser(newUser dto.CreateUserDTO) error {
@@ -33,7 +34,7 @@ func (c *userController) CreateUser(newUser dto.CreateUserDTO) error {
 	return nil
 }
 
-func (c *userController) GetUser(userData dto.GetUserDTO) (dto.UserDTO, error) {
+func (c *userController) GetUser(userData dto.GetUserDTO) (dto.GetUserDTO, error) {
 	var dbUser user.User
 	err := parser.ParseToDb(userData, &dbUser)
 	if err != nil {
@@ -42,13 +43,13 @@ func (c *userController) GetUser(userData dto.GetUserDTO) (dto.UserDTO, error) {
 	userFromDb, err := c.db.GetUser(dbUser)
 	if err != nil {
 		log.Printf("couldn't get user, err: %v", err)
-		return dto.UserDTO{}, err
+		return dto.GetUserDTO{}, err
 	}
-	var userDTO dto.UserDTO
+	var userDTO dto.GetUserDTO
 	err = parser.ParseToDTO(userFromDb, &userDTO)
 	if err != nil {
 		log.Printf("couldn't parse db data to dto struct, err: %v", err)
-		return dto.UserDTO{}, err
+		return dto.GetUserDTO{}, err
 	}
 	return userDTO, nil
 }
