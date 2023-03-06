@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"log"
 	"net/http"
 	"runtime"
 )
@@ -20,7 +19,6 @@ func (e *errorHandler) setFuncName() {
 
 func (e *errorHandler) responseForError(w http.ResponseWriter, codeStatus int) {
 	e.setFuncName()
-	log.Printf("Function:%v | error: %v | code: %v", e.function, e.err, e.statusCode)
 	w.WriteHeader(codeStatus)
 	http.Error(w, e.err.Error(), codeStatus)
 }
