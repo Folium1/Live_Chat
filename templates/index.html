@@ -3,13 +3,133 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
+    <title>Chat</title>
+    <style>
+        body {
+            font-family: Arial, Helvetica, sans-serif;
+            background-color: #f2f2f2;
+            margin: 0;
+        }
+
+        h1 {
+            text-align: center;
+            margin-top: 50px;
+        }
+
+        #input {
+            border: none;
+            border-radius: 5px;
+            padding: 10px;
+            margin-right: 10px;
+            width: 70%;
+        }
+
+        #send {
+            background-color: #4CAF50;
+            border: none;
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            width: 30%;
+        }
+
+        #output {
+            background-color: #f9f9f9;
+            padding: 10px;
+            margin: 50px;
+            border-radius: 5px;
+            font-size: 20px;
+            white-space: pre-wrap;
+        }
+
+        .new-class {
+            background-color: green;
+            padding: 10px;
+            color: white;
+            font-size: 20px;
+            text-align: center;
+        }
+
+        .content {
+            display: flex;
+            flex-direction: row;
+            justify-content: center;
+        }
+
+        .box {
+            border: 1px solid black;
+            padding: 10px;
+            margin: 10px 0;
+            font-weight: bold;
+        }
+
+        .message-container {
+            background-color: #f9f9f9;
+            padding: 10px;
+            margin: 10px;
+            border-radius: 5px;
+            font-size: 20px;
+            white-space: pre-wrap;
+        }
+
+        .message-container.me {
+            background-color: #4CAF50;
+            color: white;
+        }
+
+        .message-container.other {
+            background-color: #555;
+            color: white;
+        }
+    </style>
 </head>
 
 <body>
-    <h1>hello</h1>
+    <h1>Live Chat</h1>
+
+    <!-- FOR BOX INPUT AND SEND BUTTON -->
+    <div class="content" style="color: #4CAF50;">
+        <input type="text" id="input">
+        <button onclick="send()">send message</button>
+    </div>
+
+    <!-- PRINT YOUR MESSAGES -->
+    <div id="output"></div>
+
+    <script>
+        var input = document.getElementById('input');
+        var output = document.getElementById('output');
+        var socket = new WebSocket("ws://localhost:9090/ws/");
+
+        // ADD STYLE IN YOUR OUTPUT HTML
+        output.classList.add("new-class");
+
+        // CHECK IF YOU CONNECT TO SERVER GOLANG AND SHOW CONNECTED MESSAGE
+        socket.onopen = function () {
+            output.innerHTML += '<div class="message-container" style="color: #4CAF50;">Status: CONNECTED</div>';
+        };
+
+        // IF YOU RECEIVE MESSAGE AND WRITE TO BROWSER
+        socket.onmessage = function (e) {
+            output.innerHTML += '<div class="message-container other">' + e.data + '</div>';
+        };
+
+        // BUTTON SEND FUNCTION
+        function send() {
+            var message = input.value.trim();
+            if (message === '') {
+                return;
+            }
+
+            // output.innerHTML += '<div class="message-container me">' + message + '</div>';
+            socket.send(message);
+
+            // EMPTY INPUT
+            input.value = "";
+        }
+    </script>
 </body>
 
 </html>
