@@ -3,46 +3,65 @@ package handlers
 import (
 	auth "chat/handlers/middleware"
 	logger "chat/logger"
-	"database/sql"
-	"log"
+	"fmt"
 	"net/http"
+
+	"github.com/gorilla/websocket"
 )
 
-func chatHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		funcName := logger.GetFuncName()
-		logger.InfoHttp(r.URL.Path, r.Method, funcName)
-		// checking if token is present, if not - redirects to login page
-		token, err := auth.GetToken(r)
+var upgrader = websocket.Upgrader{
+	ReadBufferSize:  1024,
+	WriteBufferSize: 1024,
+}
+var (
+	clients []websocket.Conn
+)
+
+func chat(w http.ResponseWriter, r *http.Request) {
+	funcName := logger.GetFuncName()
+	logger.InfoHttp(r.URL.Path, r.Method, funcName)
+	// getting token from user's cookies
+	token, err := auth.GetToken(r)
+	if err != nil {
+		auth.DeleteCookies(w)
+		http.Redirect(w, r, "/login/", 302)
+		return
+	}
+	// validate token and getting user's id
+	userId, err := auth.ValidateToken(token)
+	if err != nil {
+		auth.DeleteCookies(w)
+		logger.Error("Couldn't validate token", err, funcName)
+		http.Redirect(w, r, "/login/", 302)
+		return
+	}
+	// getting user's information from db by his id
+	user, err := userController.GetUserById(userId)
+	if err != nil {
+		auth.DeleteCookies(w)
+		logger.Error(fmt.Sprintf("Couldn't get user by id(%v)", userId), err, funcName)
+		http.Redirect(w, r, "/login/", 302)
+		return
+	}
+	conn, _ := upgrader.Upgrade(w, r, nil)
+
+	clients = append(clients, *conn)
+
+	for {
+		msgType, msg, err := conn.ReadMessage()
 		if err != nil {
-			// l.Error(r.URL.Path + " " + r.Method + " " + err.Error())
-			funcName := logger.GetFuncName()
-			logger.Info("Couldn't get token", funcName)
-			http.Redirect(w, r, "/", http.StatusFound)
 			return
 		}
-		// getting user's id from token
-		userId, err := auth.ValidateToken(token)
-		if err != nil {
-			funcName := logger.GetFuncName()
-			logger.Error("Couldn't validate token", err, funcName)
-			http.Error(w, "No user id", http.StatusFound)
-		}
-		user, err := userController.GetUserById(userId)
-		if err != nil {
-			if err == sql.ErrNoRows {
-				http.Redirect(w, r, "/", http.StatusNotFound)
-				return
-			} else {
-				log.Println(err)
-				http.Error(w, "Internal server error", http.StatusInternalServerError)
-				return
+		userMessage := []byte(user.Name + ": " + string(msg))
+		for _, client := range clients {
+			err := client.WriteMessage(msgType, userMessage)
+			_,err = auth.GetToken(r)
+			if err != nil {
+				
+			}
+			if err != nil {
+				logger.Error("Couldn't deliver msg", err, funcName)
 			}
 		}
-		message := "Hello " + user.Name
-		_, err = w.Write([]byte(message))
-		if err != nil {
-			http.Error(w, "server error", http.StatusInternalServerError)
-		}
-	})
+	}
 }
