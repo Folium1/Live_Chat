@@ -50,7 +50,7 @@ func (c *chatController) ChangeData(newData chatdto.UpdateMessageDTO) error {
 	if err != nil {
 		return err
 	}
-	err = c.db.EditmMsg(changedMessage)
+	err = c.db.EditeMsg(changedMessage)
 	if err != nil {
 		return err
 	}
