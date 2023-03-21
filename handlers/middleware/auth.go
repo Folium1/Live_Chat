@@ -1,4 +1,4 @@
-package handlers
+package middleware
 
 import (
 	"fmt"
@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	dto "chat/DTO/userdto"
-	logger "chat/logger"
+	// dto "chat/DTO/userdto"
+	"chat/logger"
 
 	"github.com/dgrijalva/jwt-go"
 )
@@ -18,14 +18,14 @@ var (
 	signKey = os.Getenv("SigningKey")
 )
 
-// AuthMiddleWare
+// AuthMiddleWare checks if user is authorized if not - redirects to login page
 func AuthMiddleWare(next func() http.Handler) http.Handler {
+	funcName := logger.GetFuncName()
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// retrieve token from request
 		token, err := GetToken(r)
 		if err != nil || token == "" {
 			// redirecting to login page
-			funcName := logger.GetFuncName()
 			logger.Error("Couldn't get token", err, funcName)
 			r.Method = "GET"
 			http.Redirect(w, r, "/", http.StatusFound)
@@ -35,9 +35,19 @@ func AuthMiddleWare(next func() http.Handler) http.Handler {
 	})
 }
 
-// Generating token and send it to user
-func AuthUser(w http.ResponseWriter, r *http.Request, user dto.GetUserDTO) error {
-	token, err := GenerateToken(user)
+// DeleteCookies sets cookies by setting new one that will expire immediately
+func DeleteCookies(w http.ResponseWriter) {
+	cookies := &http.Cookie{}
+	cookies.Name = "Authorization"
+	cookies.Expires = time.Unix(0, 0)
+	cookies.Path = "/"
+	cookies.Domain = "localhost"
+	http.SetCookie(w, cookies)
+}
+
+// AuthUser generates token and send it to user
+func AuthUser(w http.ResponseWriter, userId int) error {
+	token, err := GenerateToken(userId)
 	if err != nil {
 		funcName := logger.GetFuncName()
 		logger.Error("Couldn't generate token", err, funcName)
@@ -47,21 +57,30 @@ func AuthUser(w http.ResponseWriter, r *http.Request, user dto.GetUserDTO) error
 	cookies.Name = "Authorization"
 	cookies.Value = "Bearer " + token
 	cookies.Path = "/"
+	cookies.Domain = "localhost"
 	cookies.Expires = time.Now().Add(15 * time.Minute)
 	http.SetCookie(w, cookies)
 	return nil
 }
 
+// func refreshToken(userId int) {
+// 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+// 		"Authorization": strconv.Itoa(userId),
+// 		"exp":           time.Now().Add(15 * time.Minute).Unix(),
+// 	})
+// 	tokenStr, err := token.SignedString([]byte(signKey))
+// }
+
 // GenerateToken generates jwt token
-func GenerateToken(user dto.GetUserDTO) (string, error) {
+func GenerateToken(userId int) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"Authorization": strconv.Itoa(user.Id),
+		"Authorization": strconv.Itoa(userId),
 		"exp":           time.Now().Add(15 * time.Minute).Unix(),
 	})
 	tokenStr, err := token.SignedString([]byte(signKey))
 	if err != nil {
 		funcName := logger.GetFuncName()
-		logger.Error("Coudn't sign token", err, funcName)
+		logger.Error("Couldn't sign token", err, funcName)
 		err = fmt.Errorf("server error")
 		return "", err
 	}
@@ -69,7 +88,7 @@ func GenerateToken(user dto.GetUserDTO) (string, error) {
 	return tokenStr, nil
 }
 
-// validateToken validating token and returning user's id or error
+// ValidateToken validating token and returning user's id or error
 func ValidateToken(tokenString string) (int, error) {
 	// Parse the token
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
@@ -101,24 +120,22 @@ func ValidateToken(tokenString string) (int, error) {
 func GetToken(r *http.Request) (string, error) {
 	token, err := r.Cookie("Authorization")
 	if err != nil {
-		funcName := logger.GetFuncName()
-		logger.Error("couldn't get cookies", err, funcName)
 		return "", err
 	}
 	splitToken := strings.Split(token.Value, " ")
 	if len(splitToken) != 2 || splitToken[1] == "" {
-		err := fmt.Errorf("Token not found, token: %v", token)
-		funcName := logger.GetFuncName()
-		logger.Error("Unable to get token", err, funcName)
+		err := fmt.Errorf("token not found, token: %v", token)
 		return "", err
 	}
 
 	return splitToken[1], nil
 }
 
+// IsAuthenticated checks if user is authenticated
 func IsAuthenticated(w http.ResponseWriter, r *http.Request) {
 	token, err := GetToken(r)
 	if err != nil || token == "" {
+		DeleteCookies(w)
 		return
 	}
 	http.Redirect(w, r, "/chat/", http.StatusFound)
