@@ -1,8 +1,10 @@
 package handlers
 
 import (
+	chatdto "chat/DTO/chatDTO"
 	auth "chat/handlers/middleware"
 	logger "chat/logger"
+
 	"fmt"
 	"net/http"
 
@@ -14,8 +16,28 @@ var upgrader = websocket.Upgrader{
 	WriteBufferSize: 1024,
 }
 var (
+	// chatS
 	clients []websocket.Conn
 )
+
+// chatTemplate executes html template and connects to webSocket
+func chatTemplate(w http.ResponseWriter, r *http.Request) {
+	funcName := logger.GetFuncName()
+	_, err := auth.GetToken(r)
+	if err != nil {
+		auth.DeleteCookies(w)
+		http.Redirect(w, r, "/login", 302)
+		return
+	}
+	// loading history of previous massages
+	prevMessages, err := chController.GetAllMessages()
+	if err != nil {
+		logger.Error("Couldn't get all messages from db", err, funcName)
+		http.Error(w, "Server error", 500)
+		return
+	}
+	Tmpl.ExecuteTemplate(w, "index.html", prevMessages[1:])
+}
 
 func chat(w http.ResponseWriter, r *http.Request) {
 	funcName := logger.GetFuncName()
@@ -52,12 +74,17 @@ func chat(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return
 		}
+		message := chatdto.CreateMessageDTO{}
+		message.Text = string(msg)
+		message.UserId = userId
+		message.UserName = user.Name
+		chController.CreateMsg(message)
 		userMessage := []byte(user.Name + ": " + string(msg))
 		for _, client := range clients {
 			err := client.WriteMessage(msgType, userMessage)
-			_,err = auth.GetToken(r)
+			_, err = auth.GetToken(r)
 			if err != nil {
-				
+
 			}
 			if err != nil {
 				logger.Error("Couldn't deliver msg", err, funcName)
