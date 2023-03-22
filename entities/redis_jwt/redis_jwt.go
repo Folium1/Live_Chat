@@ -2,6 +2,7 @@ package redis_jwt
 
 import (
 	"context"
+	"time"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -22,14 +23,14 @@ type RdbService interface {
 	DeleteJWT(userId string) error
 }
 
-func New(u UserJwt) RdbService {
-	return &u
+func New() RdbService {
+	return &UserJwt{}
 }
 
 func (u *UserJwt) SaveJWT(userData UserJwt) error {
-	pipline := redis.Pipeline{}
+	pipline := rdb.Pipeline()
 	pipline.HSet(ctx, userData.Id, "jwt", userData.Token)
-	pipline.Expire(ctx, userData.Id, 60*15)
+	pipline.Expire(ctx, userData.Id, 15*time.Minute)
 	result, err := pipline.Exec(ctx)
 	if err != nil {
 		return err
@@ -44,18 +45,17 @@ func (u *UserJwt) SaveJWT(userData UserJwt) error {
 }
 
 func (u *UserJwt) CompareJWT(userData UserJwt) bool {
-
 	rdbToken := rdb.HGet(ctx, userData.Id, "jwt")
-	if userData.Token == rdbToken.String() {
+	if userData.Token == rdbToken.Val() {
 		return true
 	}
 	return false
 }
 
 func (u *UserJwt) DeleteJWT(userId string) error {
-	err := rdb.HDel(ctx, userId, "jwt")
+	err := rdb.HDel(ctx, userId, "jwt").Err()
 	if err != nil {
-		return err.Err()
+		return err
 	}
 	return nil
 }
