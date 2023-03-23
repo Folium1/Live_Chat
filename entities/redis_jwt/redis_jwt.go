@@ -28,16 +28,16 @@ func New() RdbService {
 }
 
 func (u *UserJwt) SaveJWT(userData UserJwt) error {
-	pipline := rdb.Pipeline()
-	pipline.HSet(ctx, userData.Id, "jwt", userData.Token)
-	pipline.Expire(ctx, userData.Id, 15*time.Minute)
-	result, err := pipline.Exec(ctx)
+	pipeline := rdb.Pipeline()
+	pipeline.HSet(ctx, userData.Id, "jwt", userData.Token)
+	pipeline.Expire(ctx, userData.Id, 15*time.Minute)
+	result, err := pipeline.Exec(ctx)
 	if err != nil {
 		return err
 	}
 	for _, command := range result {
 		if err = command.Err(); err != nil {
-			pipline.Discard()
+			pipeline.Discard()
 			return err
 		}
 	}
