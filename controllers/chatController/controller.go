@@ -7,10 +7,10 @@ import (
 )
 
 type chatController struct {
-	db chat.Message
+	db chat.MessageService
 }
 
-func New(msg chat.Message) ControllerInterface {
+func New(msg chat.MessageService) ControllerInterface {
 	return &chatController{msg}
 }
 
@@ -18,6 +18,7 @@ type ControllerInterface interface {
 	CreateMsg(msg chatdto.CreateMessageDTO) error
 	ChangeData(newMessageData chatdto.UpdateMessageDTO) error
 	DeleteMsg(id string) error
+	GetAllMessages() ([]chatdto.MessagesDTO, error)
 }
 
 func (c *chatController) CreateMsg(msg chatdto.CreateMessageDTO) error {
@@ -64,4 +65,21 @@ func (c *chatController) DeleteMsg(id string) error {
 		return err
 	}
 	return nil
+}
+
+func (c chatController) GetAllMessages() ([]chatdto.MessagesDTO, error) {
+	messages, err := c.db.GetAllMessages()
+	if err != nil {
+		return []chatdto.MessagesDTO{}, err
+	}
+	messagesDTO := make([]chatdto.MessagesDTO, 0)
+	var messageDTO chatdto.MessagesDTO
+	for _, dbMessage := range messages {
+		err = parseToDTO(dbMessage, &messageDTO)
+		if err != nil {
+			return []chatdto.MessagesDTO{}, err
+		}
+		messagesDTO = append(messagesDTO, messageDTO)
+	}
+	return messagesDTO, nil
 }
