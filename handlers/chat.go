@@ -4,6 +4,8 @@ import (
 	chatdto "chat/DTO/chatDTO"
 	auth "chat/handlers/middleware"
 	logger "chat/logger"
+	"encoding/json"
+	"strings"
 
 	"fmt"
 	"net/http"
@@ -16,11 +18,10 @@ var upgrader = websocket.Upgrader{
 	WriteBufferSize: 1024,
 }
 var (
-	// chatS
 	clients []websocket.Conn
 )
 
-// chatTemplate executes html template and connects to webSocket
+// chatTemplate executes html template
 func chatTemplate(w http.ResponseWriter, r *http.Request) {
 	funcName := logger.GetFuncName()
 	_, err := auth.GetToken(r)
@@ -36,7 +37,7 @@ func chatTemplate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Server error", 500)
 		return
 	}
-	Tmpl.ExecuteTemplate(w, "index.html", prevMessages[1:])
+	Tmpl.ExecuteTemplate(w, "index.html", prevMessages)
 }
 
 func chat(w http.ResponseWriter, r *http.Request) {
@@ -65,7 +66,12 @@ func chat(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/login/", 302)
 		return
 	}
-	conn, _ := upgrader.Upgrade(w, r, nil)
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		logger.Error("Couldn't upgrade connection to WebSocket", err, funcName)
+		return
+	}
+	defer conn.Close()
 
 	clients = append(clients, *conn)
 
@@ -79,9 +85,8 @@ func chat(w http.ResponseWriter, r *http.Request) {
 		message.UserId = userId
 		message.UserName = user.Name
 		chController.CreateMsg(message)
-		userMessage := []byte(user.Name + ": " + string(msg))
 		for _, client := range clients {
-			err := client.WriteMessage(msgType, userMessage)
+			err := client.WriteMessage(msgType, []byte(message.UserName+": "+message.Text))
 			_, err = auth.GetToken(r)
 			if err != nil {
 
@@ -91,4 +96,43 @@ func chat(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+}
+
+// make a handle function to delete message by id from db
+func deleteMessage(w http.ResponseWriter, r *http.Request) {
+	funcName := logger.GetFuncName()
+	path := r.URL.Path
+	parts := strings.Split(path, "/")
+	id := parts[2]
+	fmt.Println(id)
+	if id == "" {
+		logger.Error("Couldn't delete message", fmt.Errorf("No message id provided"), funcName)
+		http.Error(w, "Server error", 500)
+		return
+	}
+	err := chController.DeleteMsg(id)
+	if err != nil {
+		logger.Error("Couldn't delete message", err, funcName)
+		http.Error(w, "Server error", 500)
+		return
+	}
+	for i, client := range clients {
+		err := client.WriteMessage(websocket.TextMessage, []byte("Chat.Delete:"+id))
+		if err != nil {
+			// remove the disconnected client from the slice of clients
+			clients = append(clients[:i], clients[i+1:]...)
+			logger.Error("Couldn't deliver delete message to client", err, funcName)
+		}
+	}
+	// Return a success message
+	response := map[string]string{"message": "success"}
+	jsonResponse, err := json.Marshal(response)
+	if err != nil {
+		logger.Error("Couldn't marshal JSON response", err, funcName)
+		http.Error(w, "Server error", 500)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write(jsonResponse)
 }
