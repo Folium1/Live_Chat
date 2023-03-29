@@ -1,134 +1,146 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
+
+
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chat</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.3/font/bootstrap-icons.css">
+    <title>Live Chat</title>
     <style>
-        body {
-            font-family: Arial, Helvetica, sans-serif;
-            background-color: #f2f2f2;
-            margin: 0;
-        }
-
-        h1 {
-            text-align: center;
-            margin-top: 50px;
-        }
-
-        #input {
-            border: none;
-            border-radius: 5px;
+        #chat {
+            height: 300px;
+            overflow: auto;
+            border: 1px solid #ccc;
             padding: 10px;
-            margin-right: 10px;
-            width: 70%;
+            font-family: Arial, sans-serif;
+            font-size: 14px;
+        }
+
+        .btn i.bi-trash-fill {
+            font-size: 0.6rem;
+            position: relative;
+            /* top: 0.2rem; */
+        }
+
+        css Copy code #chat div {
+            margin-bottom: 10px;
+        }
+
+        #chat div button {
+            background-color: #e74c3c;
+            color: #fff;
+            border: none;
+            padding: 5px 10px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+
+        #chat div button:hover {
+            background-color: #c0392b;
+        }
+
+        #message {
+            padding: 5px;
+            font-size: 14px;
+            border: 1px solid #ccc;
+            width: 300px;
         }
 
         #send {
-            background-color: #4CAF50;
+            background-color: #3498db;
+            color: #fff;
             border: none;
-            color: white;
-            padding: 10px;
-            border-radius: 5px;
+            padding: 5px 10px;
+            font-size: 12px;
             cursor: pointer;
-            width: 30%;
+            margin-left: 10px;
         }
 
-        #output {
-            background-color: #f9f9f9;
-            padding: 10px;
-            margin: 50px;
-            border-radius: 5px;
-            font-size: 20px;
-            white-space: pre-wrap;
-        }
-
-        .new-class {
-            background-color: green;
-            padding: 10px;
-            color: white;
-            font-size: 20px;
-            text-align: center;
-        }
-
-        .content {
-            display: flex;
-            flex-direction: row;
-            justify-content: center;
-        }
-
-        .box {
-            border: 1px solid black;
-            padding: 10px;
-            margin: 10px 0;
-            font-weight: bold;
-        }
-
-        .message-container {
-            background-color: #f9f9f9;
-            padding: 10px;
-            margin: 10px;
-            border-radius: 5px;
-            font-size: 20px;
-            white-space: pre-wrap;
-        }
-
-        .message-container.me {
-            background-color: #4CAF50;
-            color: white;
-        }
-
-        .message-container.other {
-            background-color: #555;
-            color: white;
+        #send:hover {
+            background-color: #2980b9;
         }
     </style>
 </head>
 
 <body>
-    <h1>Live Chat</h1>
-
-    <!-- FOR BOX INPUT AND SEND BUTTON -->
-    <div class="content" style="color: #4CAF50;">
-        <input type="text" id="input">
-        <button onclick="send()">send message</button>
+    <div id="chat">
+        {{range $i := .}}
+        <div id="{{ $i.Id }}">
+            <div>
+                <button class="btn btn-danger" onclick="deleteMessage(this.dataset.id)" data-id="{{$i.Id}}"><i
+                        class="bi bi-trash-fill"></i></button>
+                {{$i.UserName}}: {{$i.Text}}
+            </div>
+        </div>
+        {{end}}
+        <h3 style="font-weight: 100;">New:</h3>
     </div>
-
-    <!-- PRINT YOUR MESSAGES -->
-    <div id="output"></div>
-
+    <input type="text" id="message" placeholder="Type your message here...">
+    <button id="send">Send</button>
     <script>
-        var input = document.getElementById('input');
-        var output = document.getElementById('output');
-        var socket = new WebSocket("ws://localhost:9090/ws/");
+        const chat = document.getElementById("chat");
+        const messageInput = document.getElementById("message");
+        const sendButton = document.getElementById("send");
 
-        // ADD STYLE IN YOUR OUTPUT HTML
-        output.classList.add("new-class");
+        const socket = new WebSocket("ws://localhost:9090/ws/");
 
-        // CHECK IF YOU CONNECT TO SERVER GOLANG AND SHOW CONNECTED MESSAGE
-        socket.onopen = function () {
-            output.innerHTML += '<div class="message-container" style="color: #4CAF50;">Status: CONNECTED</div>';
+
+        socket.onopen = function (event) {
+            console.log("WebSocket connection opened.");
         };
 
-        // IF YOU RECEIVE MESSAGE AND WRITE TO BROWSER
-        socket.onmessage = function (e) {
-            output.innerHTML += '<div class="message-container other">' + e.data + '</div>';
+        socket.onclose = function (event) {
+            console.log("WebSocket connection closed.");
         };
 
-        // BUTTON SEND FUNCTION
-        function send() {
-            var message = input.value.trim();
-            if (message === '') {
-                return;
+        function sendMessage() {
+            const message = messageInput.value;
+            if (message == "") {
+                return
             }
-
-            // output.innerHTML += '<div class="message-container me">' + message + '</div>';
             socket.send(message);
-
-            // EMPTY INPUT
-            input.value = "";
+            messageInput.value = "";
         }
+        sendButton.addEventListener("click", sendMessage);
+
+
+        socket.onmessage = function (event) {
+            const data = event.data;
+
+            if (data.startsWith("Chat.Delete:")) {
+                const messageId = data.split(":")[1];
+                const messageEl = document.getElementById(messageId);
+                if (messageEl) {
+                    messageEl.remove();
+                }
+            } else {
+                const message = JSON.parse(data);
+                if (message.Text == "") {
+                    return
+                }
+
+                chat.innerHTML += "<div id='" + message.messageId + "'><button class=\"btn btn-danger\" onclick='deleteMessage(this.dataset.id)' data-id=\"" + message.messageId + "\"><i class=\"bi bi-trash-fill\"></i></button>" + message.user_name + ": " + message.text + "</div>";
+                chat.scrollTop = chat.scrollHeight;
+
+            }
+        };
+
+        // create a deleteMessage function that receives an id
+        function deleteMessage(id) {
+            fetch("http://localhost:9090/delete/" + id, {
+                method: "DELETE"
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.message === "success") {
+                        console.log("Message deleted");
+                    }
+                })
+                .catch(error => console.error(error));
+        }
+
+
     </script>
 </body>
 
