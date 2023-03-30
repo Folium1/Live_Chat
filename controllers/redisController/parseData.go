@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 )
 
-func parseToDb(dtoData any, dbData *redis_jwt.UserJwt) error {
+func parseToDb(dtoData any, dbData *redis_jwt.RedisData) error {
 	data, err := json.Marshal(dtoData)
 	if err != nil {
 		return err

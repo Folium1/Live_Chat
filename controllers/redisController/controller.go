@@ -3,6 +3,7 @@ package rediscontroller
 import (
 	dto "chat/DTO/redis_jwt"
 	"chat/entities/redis_jwt"
+	"errors"
 )
 
 type RdbController struct {
@@ -10,6 +11,13 @@ type RdbController struct {
 }
 
 type Service interface {
+	SaveJWT(userData dto.RdbDTO) error
+	DeleteJWT(userId string) error
+	GetJWT(user_id string) (string, error)
+
+	SaveRefreshToken(userData dto.RdbDTO) error
+	GetRefreshToken(user_Id string) (string, error)
+	DeleteRefreshToken(userId string) error
 }
 
 func New(redis redis_jwt.RdbService) Service {
@@ -17,7 +25,7 @@ func New(redis redis_jwt.RdbService) Service {
 }
 
 func (c *RdbController) SaveJWT(userData dto.RdbDTO) error {
-	var dbData redis_jwt.UserJwt
+	var dbData redis_jwt.RedisData
 	err := parseToDb(userData, &dbData)
 	if err != nil {
 		return err
@@ -37,14 +45,39 @@ func (c *RdbController) DeleteJWT(userId string) error {
 	return nil
 }
 
-func (c *RdbController) CompareJWT(userData dto.RdbDTO) (error, bool) {
-	var dbData redis_jwt.UserJwt
+func (c *RdbController) GetJWT(user_id string) (string, error) {
+	rdbToken := c.rdb.GetJWT(user_id)
+	if rdbToken == "" {
+		return "", errors.New("no refresh token found")
+	}
+	return rdbToken, nil
+}
+
+func (c *RdbController) SaveRefreshToken(userData dto.RdbDTO) error {
+	var dbData redis_jwt.RedisData
 	err := parseToDb(userData, &dbData)
 	if err != nil {
-		return err, false
+		return err
 	}
-	if c.rdb.CompareJWT(dbData) {
-		return nil, true
+	err = c.rdb.SaveRefreshToken(dbData)
+	if err != nil {
+		return err
 	}
-	return nil, false
+	return nil
+}
+
+func (c *RdbController) GetRefreshToken(user_Id string) (string, error) {
+	token := c.rdb.GetRefresh(user_Id)
+	if token == "" {
+		return "", errors.New("no refresh token found")
+	}
+	return token, nil
+}
+
+func (c *RdbController) DeleteRefreshToken(userId string) error {
+	err := c.rdb.DeleteRefreshToken(userId)
+	if err != nil {
+		return err
+	}
+	return nil
 }
