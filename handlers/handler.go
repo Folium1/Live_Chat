@@ -1,13 +1,10 @@
 package handlers
 
 import (
-	"html/template"
-
-	auth "chat/handlers/middleware"
+	middleware "chat/handlers/middleware"
 	logger "chat/logger"
-
+	"html/template"
 	"net/http"
-	// "github.com/sirupsen/logrus"
 )
 
 var (
@@ -21,18 +18,10 @@ func StartServer() {
 		funcName := logger.GetFuncName()
 		logger.Error("Couldn't parse tamplate", err, funcName)
 	}
-	http.HandleFunc("/ws/", chat)
-	http.HandleFunc("/chat/", func(w http.ResponseWriter, r *http.Request) {
-		_, err := auth.GetToken(r)
-		if err != nil {
-			auth.DeleteCookies(w)
-			http.Redirect(w, r, "/login", 302)
-			return
-		}
-		Tmpl.ExecuteTemplate(w, "index.html", nil)
-	})
-
-	http.HandleFunc("/login", loginHandler().ServeHTTP)
+	http.Handle("/ws/", middleware.AuthMiddleware(http.HandlerFunc(chat)))
+	http.Handle("/chat/", middleware.AuthMiddleware(http.HandlerFunc(chatTemplate)))
+	http.Handle("/delete/", middleware.AuthMiddleware(http.HandlerFunc(deleteMessage)))
+	http.HandleFunc("/login/", loginHandler().ServeHTTP)
 	http.HandleFunc("/sign-up/", signUpHandler().ServeHTTP)
 
 	err = http.ListenAndServe(":9090", nil)
