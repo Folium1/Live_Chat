@@ -1,8 +1,10 @@
 package chatdto
 
 type CreateMessageDTO struct {
-	UserId string `json:"userId"`
-	Text   string `json:"text"`
+	Id       int    `json:"messageId"`
+	UserName string `json:"user_name"`
+	UserId   string `json:"userId"`
+	Text     string `json:"text"`
 }
 
 type UpdateMessageDTO struct {
@@ -12,8 +14,16 @@ type UpdateMessageDTO struct {
 
 type MessageDTO struct {
 	Id        int    `json:"messageId"`
-	UserId    string `json:"userId"`
+	UserName  string `json:"user_name"`
 	Text      string `json:"text"`
+	CreatedAt string `json:"created_at"`
+	UpdatedAt string `json:"updated_at"`
+}
+
+type MessagesDTO struct {
+	Id        int    `json:"messageId"`
+	Text      string `json:"text"`
+	UserName  string `json:"user_name"`
 	CreatedAt string `json:"created_at"`
 	UpdatedAt string `json:"updated_at"`
 }
