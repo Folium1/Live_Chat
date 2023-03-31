@@ -7,77 +7,46 @@ import (
 )
 
 type RdbController struct {
-	rdb redis_jwt.RdbService
+	redis redis_jwt.RedisDbService
 }
 
 type Service interface {
-	SaveJWT(userData dto.RdbDTO) error
-	DeleteJWT(userId string) error
-	GetJWT(user_id string) (string, error)
-
-	SaveRefreshToken(userData dto.RdbDTO) error
-	GetRefreshToken(user_Id string) (string, error)
-	DeleteRefreshToken(userId string) error
+	SaveToken(data dto.RedisDto) error
+	DeleteJWT(data dto.RedisDto) error
+	GetToken(data dto.RedisDto) (string, error)
 }
 
-func New(redis redis_jwt.RdbService) Service {
+func New(redis redis_jwt.RedisDbService) Service {
 	return &RdbController{redis}
 }
 
-func (c *RdbController) SaveJWT(userData dto.RdbDTO) error {
+func (c *RdbController) SaveToken(data dto.RedisDto) error {
 	var dbData redis_jwt.RedisData
-	err := parseToDb(userData, &dbData)
+	err := parseToDb(data, &dbData)
 	if err != nil {
 		return err
 	}
-	err = c.rdb.SaveJWT(dbData)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (c *RdbController) DeleteJWT(userId string) error {
-	err := c.DeleteJWT(userId)
+	err = c.redis.SaveToken(dbData)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (c *RdbController) GetJWT(user_id string) (string, error) {
-	rdbToken := c.rdb.GetJWT(user_id)
+func (c *RdbController) DeleteJWT(data dto.RedisDto) error {
+	var dbData redis_jwt.RedisData
+	parseToDb(data, &dbData)
+	err := c.redis.DeleteToken(dbData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (c *RdbController) GetToken(data dto.RedisDto) (string, error) {
+	rdbToken := c.redis.GetToken(redis_jwt.RedisData(data))
 	if rdbToken == "" {
 		return "", errors.New("no refresh token found")
 	}
 	return rdbToken, nil
-}
-
-func (c *RdbController) SaveRefreshToken(userData dto.RdbDTO) error {
-	var dbData redis_jwt.RedisData
-	err := parseToDb(userData, &dbData)
-	if err != nil {
-		return err
-	}
-	err = c.rdb.SaveRefreshToken(dbData)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (c *RdbController) GetRefreshToken(user_Id string) (string, error) {
-	token := c.rdb.GetRefresh(user_Id)
-	if token == "" {
-		return "", errors.New("no refresh token found")
-	}
-	return token, nil
-}
-
-func (c *RdbController) DeleteRefreshToken(userId string) error {
-	err := c.rdb.DeleteRefreshToken(userId)
-	if err != nil {
-		return err
-	}
-	return nil
 }
