@@ -1,11 +1,15 @@
 package chat
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 
 	entity "chat/entities"
 )
+
+var ctx = context.Background()
 
 type MessageService interface {
 	SendMsg(msg Message) (int, error)
@@ -19,60 +23,84 @@ func New() MessageService {
 
 // SendMsg creates message
 func (m *Message) SendMsg(msg Message) (int, error) {
-	db, err := entity.DbConnect()
+	redisDb, err := entity.RedisConnect()
 	if err != nil {
-		log.Fatalf("Couldn't connect to db, err: '%v'", err)
+		log.Fatalf("Couldn't connect to Redis, err: '%v'", err)
 	}
-	defer db.Close()
-	query := fmt.Sprintf("INSERT INTO chat.messages(user_name,user_id,text,created_at,updated_at) VALUES('%v','%v','%v',now(),now());", msg.UserName, msg.UserId, msg.Text)
-	result, err := db.Exec(query)
+
+	id, err := redisDb.Incr(ctx, "chat:nextMsgId").Result()
 	if err != nil {
-		log.Fatalf("Err: '%v'", err)
+		log.Fatalf("Couldn't generate new message ID, err: '%v'", err)
 		return 0, err
 	}
-	id, err := result.LastInsertId()
+
+	msg.Id = int(id)
+
+	data, err := json.Marshal(msg)
 	if err != nil {
-		log.Fatalf("Err: '%v'", err)
+		log.Fatalf("Couldn't marshal message to JSON, err: '%v'", err)
 		return 0, err
 	}
-	return int(id), nil
+
+	key := fmt.Sprintf("chat:msg:%d", msg.Id)
+	err = redisDb.Set(ctx, key, data, 0).Err()
+	if err != nil {
+		log.Fatalf("Couldn't save message to Redis, err: '%v'", err)
+		return 0, err
+	}
+
+	return msg.Id, nil
 }
 
-// DeleteMsg deletes message from db
+// DeleteMsg deletes message from Redis
 func (m *Message) DeleteMsg(id string) error {
-	db, err := entity.DbConnect()
+	redisDb, err := entity.RedisConnect()
 	if err != nil {
-		log.Fatalf("Couldn't connect to db, err: '%v'", err)
+		log.Fatalf("Couldn't connect to Redis, err: '%v'", err)
 	}
-	defer db.Close()
 
-	_, err = db.Exec("DELETE FROM chat.messages WHERE id = ?;", id)
+	key := fmt.Sprintf("chat:msg:%s", id)
+	err = redisDb.Del(ctx, key).Err()
 	if err != nil {
 		return err
 	}
+
 	return nil
 }
 
-// GetAllMessages returns all messages from db
+// GetAllMessages returns all messages from Redis
 func (m *Message) GetAllMessages() ([]Message, error) {
-	db, err := entity.DbConnect()
+	redisDb, err := entity.RedisConnect()
 	if err != nil {
-		log.Fatalf("Couldn't connect to db, err: '%v'", err)
+		log.Fatalf("Couldn't connect to Redis, err: '%v'", err)
 	}
-	defer db.Close()
-	rows, err := db.Query("SELECT id,text,user_name,created_at,updated_at FROM chat.messages;")
-	if err != nil {
-		log.Panicf("Couldn't make a query, err: '%v'", err)
-	}
-	defer rows.Close()
+
+	iter := redisDb.Scan(ctx, 0, "chat:msg:*", 0).Iterator()
+
 	var messages []Message
-	for rows.Next() {
-		var currentMessage Message
-		err = rows.Scan(&currentMessage.Id, &currentMessage.Text, &currentMessage.UserName, &currentMessage.CreatedAt, &currentMessage.UpdatedAt)
+
+	for iter.Next(ctx) {
+		key := iter.Val()
+		data, err := redisDb.Get(ctx, key).Bytes()
 		if err != nil {
+			log.Fatalf("Couldn't get message data from Redis, err: '%v'", err)
 			return nil, err
 		}
-		messages = append(messages, currentMessage)
+		fmt.Println(string(data))
+		var msg Message
+		err = json.Unmarshal(data, &msg)
+		if err != nil {
+			log.Fatalf("Couldn't unmarshal message from JSON, err: '%v'", err)
+			return nil, err
+		}
+
+		messages = append(messages, msg)
 	}
+
+	if err := iter.Err(); err != nil {
+		log.Fatalf("Couldn't iterate over Redis keys, err: '%v'", err)
+		return nil, err
+	}
+
 	return messages, nil
 }
