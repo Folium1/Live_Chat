@@ -1,52 +1,45 @@
 package middleware
 
 import (
+	redisDto "chat/DTO/jwt"
+	jwtcontroller "chat/controllers/jwtController"
+	"chat/logger"
+
 	"context"
 	"fmt"
 	"net/http"
 	"os"
-	"strings"
 	"time"
-
-	redisDto "chat/DTO/redis_jwt"
-	rediscontroller "chat/controllers/redisController"
-	"chat/entities/redis_jwt"
-	"chat/logger"
 
 	"github.com/dgrijalva/jwt-go"
 )
 
 var (
-	redisDb         = redis_jwt.RedisData{}
-	redisController = rediscontroller.New(&redisDb)
-	signKey         = os.Getenv("SigningKey")
+	jwtController = jwtcontroller.New()
+	signKey       = os.Getenv("SigningKey")
 
-	jwtRefreshExpiration = time.Now().Add(30 * (24 * time.Hour))
-	jwtAccessExpiration  = time.Now().Add(15 * time.Minute)
+	jwtRefreshExpiration = 30 * (24 * time.Hour)
+	jwtAccessExpiration  = 15 * time.Minute
 )
 
-type Token struct {
-	Type     string
-	StrToken string
-	Value    *jwt.Token
-}
-
 // GenerateToken generates a jwt token with the specified claims and expiration time
-func GenerateToken(claims jwt.MapClaims, expiration time.Time) (string, error) {
+func GenerateToken(claims jwt.MapClaims) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	tokenStr, err := token.SignedString([]byte(signKey))
 	if err != nil {
 		return "", fmt.Errorf("Couldn't sign token: %v", err)
 	}
-	if id, ok := claims["Authorization"].(string); ok {
-		err = redisController.SaveToken(redisDto.RedisDto{Token: tokenStr, Key: "jwt", Id: id})
+
+	if id, ok := claims["RefreshToken"].(string); ok {
+		err = jwtController.SaveToken(redisDto.RedisDto{Token: tokenStr, Key: "RefreshToken", Id: id, Expiration: jwtRefreshExpiration})
 		if err != nil {
-			return "", fmt.Errorf("Couldn't save token to Redis: %v", err)
+			return "", fmt.Errorf("Couldn't save refresh token to Redis: %v", err)
 		}
-	} else if id, ok := claims["RefreshToken"].(string); ok {
-		err = redisController.SaveToken(redisDto.RedisDto{Token: tokenStr, Key: "RefreshToken", Id: id})
+	}
+	if id, ok := claims["AccesssToken"].(string); ok {
+		err = jwtController.SaveToken(redisDto.RedisDto{Token: tokenStr, Key: "AccessToken", Id: id, Expiration: jwtAccessExpiration})
 		if err != nil {
-			return "", fmt.Errorf("Couldn't save token to Redis: %v", err)
+			return "", fmt.Errorf("Couldn't save access token to Redis: %v", err)
 		}
 	}
 	return tokenStr, nil
@@ -54,28 +47,26 @@ func GenerateToken(claims jwt.MapClaims, expiration time.Time) (string, error) {
 
 // GenerateRefreshToken generates a refresh token for the specified user ID
 func GenerateRefreshToken(userId string) (string, error) {
-
 	claims := jwt.MapClaims{
 		"RefreshToken": userId,
 		"exp":          jwtRefreshExpiration,
 	}
-	return GenerateToken(claims, jwtRefreshExpiration)
+	return GenerateToken(claims)
 }
 
 // GenerateAccessToken generates an access token for the specified user ID
 func GenerateAccessToken(userId string) (string, error) {
 	claims := jwt.MapClaims{
-		"Authorization": userId,
-		"exp":           jwtAccessExpiration,
+		"AccesssToken": userId,
+		"exp":          jwtAccessExpiration,
 	}
-
-	return GenerateToken(claims, jwtAccessExpiration)
+	return GenerateToken(claims)
 }
 
 // DeleteCookies sets cookies by setting new one that will expire immediately
 func DeleteCookies(w http.ResponseWriter) {
 	accesCookies := &http.Cookie{}
-	accesCookies.Name = "Authorization"
+	accesCookies.Name = "AccesssToken"
 	accesCookies.Expires = time.Now().Add(-1 * time.Hour)
 	accesCookies.Path = "/"
 	accesCookies.Domain = "localhost"
@@ -96,11 +87,12 @@ func SetRefreshCookies(w http.ResponseWriter, userId string) error {
 		return err
 	}
 	refreshCookie := &http.Cookie{
-		Name:    "RefreshToken",
-		Value:   "Bearer " + refreshToken,
-		Path:    "/",
-		Domain:  "localhost",
-		Expires: time.Now().Add(30 * (24 * time.Hour)),
+		Name:     "RefreshToken",
+		Value:    refreshToken,
+		Path:     "/",
+		Domain:   "localhost",
+		Expires:  time.Now().Add(30 * (24 * time.Hour)),
+		HttpOnly: true,
 	}
 	http.SetCookie(w, refreshCookie)
 	return nil
@@ -112,11 +104,12 @@ func SetAccessCookies(w http.ResponseWriter, userId string) error {
 		return err
 	}
 	accessCookie := &http.Cookie{
-		Name:    "Authorization",
-		Value:   "Bearer " + accessToken,
-		Path:    "/",
-		Domain:  "localhost",
-		Expires: time.Now().Add(15 * time.Minute),
+		Name:     "AccesssToken",
+		Value:    accessToken,
+		Path:     "/",
+		Domain:   "localhost",
+		Expires:  time.Now().Add(15 * time.Minute),
+		HttpOnly: true,
 	}
 	http.SetCookie(w, accessCookie)
 	return nil
@@ -138,8 +131,8 @@ func AuthUser(w http.ResponseWriter, userId string) error {
 	return nil
 }
 
-func validateToken(cookies *http.Cookie) (jwt.MapClaims, error) {
-	tokenString := strings.Split(cookies.Value, " ")[1]
+func ValidateToken(cookies *http.Cookie) (jwt.MapClaims, error) {
+	tokenString := cookies.Value
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("Unexpected signing method: %v", token.Header["alg"])
@@ -159,76 +152,94 @@ func validateToken(cookies *http.Cookie) (jwt.MapClaims, error) {
 func AuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		funcName := logger.GetFuncName()
-		accesCookies, err := r.Cookie("Authorization")
+		accesCookies, err := r.Cookie("AccesssToken")
 		if err != nil {
 			logger.Error("Couldn't get access accesCookies", err, funcName)
 			refreshCookies, err := r.Cookie("RefreshToken")
-
 			if err != nil {
 				logger.Error("Coudn't get refresh token from cookies", err, funcName)
-				http.Redirect(w, r, "/login/", http.StatusFound)
+				http.Redirect(w, r, "/login/", http.StatusSeeOther)
 				return
 			}
-			claims, err := validateToken(refreshCookies)
-			if err != nil {
 
-				http.Redirect(w, r, "/login/", http.StatusFound)
+			claims, err := ValidateToken(refreshCookies)
+			if err != nil {
+				http.Redirect(w, r, "/login/", http.StatusSeeOther)
 				return
 			}
+
 			userId, ok := claims["RefreshToken"].(string)
 			if !ok {
 				logger.Error("Couldn't convert claims to int", err, funcName)
 
-				http.Redirect(w, r, "/login/", http.StatusFound)
+				http.Redirect(w, r, "/login/", http.StatusSeeOther)
 				return
 			}
 
+			tokenString := refreshCookies.Value
+			redisToken, err := jwtController.GetToken(redisDto.RedisDto{Id: userId, Key: "RefreshToken"})
+			if err != nil {
+				logger.Error("Couldn't get RefreshToken from redis", err, funcName)
+				DeleteCookies(w)
+				jwtController.DeleteToken(redisDto.RedisDto{Id: userId, Key: "RefreshToken"})
+				http.Redirect(w, r, "/login/", http.StatusSeeOther)
+				return
+			}
+			if redisToken != tokenString {
+				logger.Error("User's refresh token and token from redis don't match", err, funcName)
+				DeleteCookies(w)
+				jwtController.DeleteToken(redisDto.RedisDto{Id: userId, Key: "RefreshToken"})
+				http.Redirect(w, r, "/login/", http.StatusSeeOther)
+				return
+			}
 			err = SetAccessCookies(w, userId)
 			if err != nil {
 				logger.Error("Couldn't generate acces token", err, funcName)
-
-				http.Redirect(w, r, "/login/", http.StatusFound)
+				http.Redirect(w, r, "/login/", http.StatusSeeOther)
 				return
 			}
 			ctx := context.WithValue(r.Context(), "userId", userId)
 			next.ServeHTTP(w, r.WithContext(ctx))
 			return
 		}
-		// tokenString := strings.Split(accesCookies.Value, " ")[1]
-		claims, err := validateToken(accesCookies)
+		tokenString := accesCookies.Value
+		claims, err := ValidateToken(accesCookies)
 		if err != nil {
 			logger.Error("Couldn't validate token", err, funcName)
 
 			http.Redirect(w, r, "/login/", http.StatusFound)
 			return
 		}
-		userId, ok := claims["Authorization"].(string)
+		userId, ok := claims["AccesssToken"].(string)
 		if !ok {
 			logger.Error("Couldn't convert claims to int", err, funcName)
 
 			http.Redirect(w, r, "/login/", http.StatusFound)
 			return
 		}
-		// redistoken, err := redisController.GetJWT(strconv.Itoa(userId))
-		// if err != nil {
-		// 	logger.Error("Couldn't get jwt from redis", err, funcName)
-		//
-		// 	http.Redirect(w, r, "/login/", http.StatusFound)
-		// 	return
-		// }
-		// if redistoken != tokenString {
-		// 	logger.Error("Token from redis doesn't match", err, funcName)
-		//
-		// 	http.Redirect(w, r, "/login/", http.StatusFound)
-		// 	return
-		// }
+		// Getting token from redis by user's id
+		redisToken, err := jwtController.GetToken(redisDto.RedisDto{Id: userId, Key: "AccessToken"})
+		if err != nil {
+			logger.Error("Couldn't get access token from redis", err, funcName)
+			DeleteCookies(w)
+			jwtController.DeleteToken(redisDto.RedisDto{Id: userId, Key: "AccessToken"})
+			http.Redirect(w, r, "/login/", http.StatusFound)
+			return
+		}
+		if redisToken != tokenString {
+			logger.Error("Token from redis doesn't match", err, funcName)
+			DeleteCookies(w)
+			jwtController.DeleteToken(redisDto.RedisDto{Id: userId, Key: "AccessToken"})
+			http.Redirect(w, r, "/login/", http.StatusSeeOther)
+			return
+		}
 		ctx := context.WithValue(r.Context(), "userId", userId)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
 func IsAuthenticated(w http.ResponseWriter, r *http.Request) bool {
-	_, err := r.Cookie("Authorization")
+	_, err := r.Cookie("AccesssToken")
 	if err != nil {
 		_, err := r.Cookie("RefreshToken")
 		if err != nil {
@@ -236,4 +247,60 @@ func IsAuthenticated(w http.ResponseWriter, r *http.Request) bool {
 		}
 	}
 	return true
+}
+
+// LogoutHandler deletes user's access and refresh tokens
+func LogOut(w http.ResponseWriter, r *http.Request) {
+	funcName := logger.GetFuncName()
+
+	// Get the refresh cookies from the request
+	cookie, err := r.Cookie("RefreshToken")
+	if err != nil {
+		logger.Error("Failed to get refresh token cookie", err, funcName)
+		cookie, err = r.Cookie("AccesssToken")
+		if err != nil {
+			logger.Error("Failed to get refresh token cookie", err, funcName)
+
+		}
+	}
+	userId, err := GetUserIdFromToken(cookie)
+	if err != nil {
+		logger.Error("Failed to get user id from token", err, funcName)
+
+	}
+	// Delete the cookies
+
+	var redis redisDto.RedisDto
+	redis.Id = userId
+	redis.Key = "RefreshToken"
+	// Delete the tokens from Redis
+	err = jwtController.DeleteToken(redis)
+	if err != nil {
+		logger.Error("Failed to delete refresh token from Redis", err, funcName)
+	}
+	redis.Id = userId
+	redis.Key = "AccessToken"
+	err = jwtController.DeleteToken(redis)
+	if err != nil {
+		logger.Error("Failed to delete access token from Redis", err, funcName)
+	}
+}
+
+// function that gets user id from jwt refresh or access token
+func GetUserIdFromToken(cookies *http.Cookie) (string, error) {
+	funcName := logger.GetFuncName()
+	claims, err := ValidateToken(cookies)
+	if err != nil {
+		logger.Error("Couldn't validate token", err, funcName)
+		return "", err
+	}
+	userId, ok := claims["RefreshToken"].(string)
+	if !ok {
+		userId, ok = claims["AccesssToken"].(string)
+		if !ok {
+			logger.Error("Couldn't convert claims to int", err, funcName)
+			return "", err
+		}
+	}
+	return userId, nil
 }
