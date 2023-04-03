@@ -13,17 +13,13 @@ type UpdateMessageDTO struct {
 }
 
 type MessageDTO struct {
-	Id        int    `json:"messageId"`
-	UserName  string `json:"user_name"`
-	Text      string `json:"text"`
-	CreatedAt string `json:"created_at"`
-	UpdatedAt string `json:"updated_at"`
+	Id       int    `json:"messageId"`
+	UserName string `json:"user_name"`
+	Text     string `json:"text"`
 }
 
 type MessagesDTO struct {
-	Id        int    `json:"messageId"`
-	Text      string `json:"text"`
-	UserName  string `json:"user_name"`
-	CreatedAt string `json:"created_at"`
-	UpdatedAt string `json:"updated_at"`
+	Id       int    `json:"messageId"`
+	Text     string `json:"text"`
+	UserName string `json:"user_name"`
 }

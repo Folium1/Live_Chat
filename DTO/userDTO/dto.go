@@ -1,7 +1,7 @@
 package userdto
 
 type UserDTO struct {
-	Id       int    `json:"id"`
+	Id       string `json:"id"`
 	Name     string `json:"name"`
 	Mail     string `json:"mail"`
 	Password string `json:"pass"`
@@ -14,7 +14,12 @@ type CreateUserDTO struct {
 }
 
 type GetUserDTO struct {
-	Id       int    `json:"id"`
+	Id       string `json:"id"`
 	Mail     string `json:"mail"`
 	Password string `json:"pass"`
+}
+
+type ChatUserDTO struct {
+	Name string `json:"name"`
+	Mail string `json:"mail"`
 }
