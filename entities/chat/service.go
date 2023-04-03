@@ -86,7 +86,6 @@ func (m *Message) GetAllMessages() ([]Message, error) {
 			log.Fatalf("Couldn't get message data from Redis, err: '%v'", err)
 			return nil, err
 		}
-		fmt.Println(string(data))
 		var msg Message
 		err = json.Unmarshal(data, &msg)
 		if err != nil {
