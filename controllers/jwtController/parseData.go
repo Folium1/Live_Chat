@@ -1,7 +1,7 @@
-package rediscontroller
+package jwtcontroller
 
 import (
-	"chat/entities/redis_jwt"
+	"chat/entities/jwt"
 	"encoding/json"
 )
 

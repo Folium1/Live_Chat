@@ -10,52 +10,33 @@ type chatController struct {
 	db chat.MessageService
 }
 
-func New(msg chat.MessageService) ControllerInterface {
+func New() ControllerInterface {
+	msg := chat.New()
 	return &chatController{msg}
 }
 
 type ControllerInterface interface {
-	CreateMsg(msg chatdto.CreateMessageDTO) error
-	ChangeData(newMessageData chatdto.UpdateMessageDTO) error
+	CreateMsg(msg chatdto.CreateMessageDTO) (int, error)
 	DeleteMsg(id string) error
 	GetAllMessages() ([]chatdto.MessagesDTO, error)
 }
 
-func (c *chatController) CreateMsg(msg chatdto.CreateMessageDTO) error {
+func (c *chatController) CreateMsg(msg chatdto.CreateMessageDTO) (int, error) {
 	var message chat.Message
 	// Parsing dto data to Message struct variable
 	data, err := json.Marshal(msg)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	err = json.Unmarshal(data, &message)
 	if err != nil {
-		return err
+		return 0, err
 	}
-	err = c.db.SendMsg(message)
+	id, err := c.db.SendMsg(message)
 	if err != nil {
-		return err
+		return 0, err
 	}
-	return nil
-}
-
-// Gets new text for message by id
-func (c *chatController) ChangeData(newData chatdto.UpdateMessageDTO) error {
-	var changedMessage chat.Message
-	// Parsing dto data to Message struct variable
-	data, err := json.Marshal(newData)
-	if err != nil {
-		return err
-	}
-	err = json.Unmarshal(data, &changedMessage)
-	if err != nil {
-		return err
-	}
-	err = c.db.EditeMsg(changedMessage)
-	if err != nil {
-		return err
-	}
-	return nil
+	return id, nil
 }
 
 // Delets message from db by id

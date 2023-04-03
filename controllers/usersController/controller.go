@@ -10,27 +10,28 @@ type userController struct {
 	db user.UserService
 }
 
-func New(user user.UserService) UserController {
+func New() UserController {
+	user := user.New()
 	return &userController{user}
 }
 
 type UserController interface {
-	CreateUser(newUser dto.CreateUserDTO) error
+	CreateUser(newUser dto.CreateUserDTO)(string, error)
 	GetUser(userData dto.GetUserDTO) (dto.GetUserDTO, error)
-	GetUserById(id int) (dto.ChatUserDTO, error)
+	GetUserById(id string) (dto.ChatUserDTO, error)
 }
 
-func (c *userController) CreateUser(newUser dto.CreateUserDTO) error {
+func (c *userController) CreateUser(newUser dto.CreateUserDTO) (string,error) {
 	var dbUser user.User
 	err := parseUserToDb(newUser, &dbUser)
 	if err != nil {
 		log.Printf("couldn't parse dto data to db struct, err: %v", err)
 	}
-	err = c.db.CreateUser(dbUser)
+	id,err := c.db.CreateUser(dbUser)
 	if err != nil {
-		return err
+		return "",err
 	}
-	return nil
+	return id,nil
 }
 
 func (c *userController) GetUser(userData dto.GetUserDTO) (dto.GetUserDTO, error) {
@@ -53,7 +54,7 @@ func (c *userController) GetUser(userData dto.GetUserDTO) (dto.GetUserDTO, error
 	return userDTO, nil
 }
 
-func (c *userController) GetUserById(id int) (dto.ChatUserDTO, error) {
+func (c *userController) GetUserById(id string) (dto.ChatUserDTO, error) {
 	user, err := c.db.GetUserById(id)
 	if err != nil {
 
