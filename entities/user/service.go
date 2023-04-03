@@ -3,14 +3,15 @@ package user
 import (
 	"fmt"
 	"log"
+	"strconv"
 
 	entity "chat/entities"
 )
 
 type UserService interface {
-	CreateUser(newUser User) error
+	CreateUser(newUser User) (string, error)
 	UserByMail(user User) (User, error)
-	GetUserById(id int) (User, error)
+	GetUserById(id string) (User, error)
 }
 
 func New() UserService {
@@ -18,24 +19,25 @@ func New() UserService {
 }
 
 // CreateUser Creats new User
-func (u *User) CreateUser(newUser User) error {
-	db, err := entity.DbConnect()
+func (u *User) CreateUser(newUser User) (string, error) {
+	db, err := entity.MySQLConnect()
 	if err != nil {
 		log.Panicf("Couldn't connect to db, err: %v", err)
 	}
 	defer db.Close()
 	query := fmt.Sprintf("INSERT INTO chat.users(name,email,password) VALUES('%v','%v','%v');", newUser.Name, newUser.Mail, newUser.Password)
-	_, err = db.Query(query)
+	result, err := db.Exec(query)
 	if err != nil {
 		log.Panicf("Couldn't create new user, err: %v", err)
-		return err
+		return "", err
 	}
-	return nil
+	id, err := result.LastInsertId()
+	return strconv.Itoa(int(id)), nil
 }
 
 // UserByMail returns user by his mail
 func (u *User) UserByMail(user User) (User, error) {
-	db, err := entity.DbConnect()
+	db, err := entity.MySQLConnect()
 	if err != nil {
 		log.Panicf("Couldn't connect to db, err: %v", err)
 	}
@@ -47,6 +49,7 @@ func (u *User) UserByMail(user User) (User, error) {
 		log.Println(err)
 		return User{}, err
 	}
+	defer raws.Close()
 	for raws.Next() {
 		err := raws.Scan(&user.Id, &user.Password)
 		if err != nil {
@@ -58,8 +61,8 @@ func (u *User) UserByMail(user User) (User, error) {
 }
 
 // GetUserById returns user by his шd
-func (u *User) GetUserById(id int) (User, error) {
-	db, err := entity.DbConnect()
+func (u *User) GetUserById(id string) (User, error) {
+	db, err := entity.MySQLConnect()
 	if err != nil {
 		log.Panicf("Couldn't connect to db, err: %v", err)
 	}
@@ -72,6 +75,7 @@ func (u *User) GetUserById(id int) (User, error) {
 	}
 	var user User
 	user.Id = id
+	defer raws.Close()
 	for raws.Next() {
 		err = raws.Scan(&user.Name, &user.Mail)
 		if err != nil {
