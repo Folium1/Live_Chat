@@ -3,12 +3,21 @@ package main
 import (
 	entity "chat/entities"
 	handler "chat/handlers"
+	"log"
 )
 
-func main() {
-	err := entity.DbTablesInit()
+func init() {
+
+	err := entity.MySQLTablesInit()
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
+	_, err = entity.RedisConnect()
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+func main() {
 	handler.StartServer()
 }
